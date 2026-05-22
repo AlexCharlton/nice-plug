@@ -13,7 +13,7 @@ mod wrapper;
 /// Re-export for the wrapper.
 pub use factory::PluginInfo;
 use nice_plug_core::plugin::Plugin;
-pub use vst3_sys;
+pub use vst3;
 pub use wrapper::Wrapper;
 
 use crate::wrapper::vst3::subcategories::Vst3SubCategory;
@@ -68,20 +68,12 @@ macro_rules! nice_export_vst3 {
         // variadic generics (yet) we can't generate the struct for multiple plugin types without
         // macros. So instead we'll generate the implementation ad-hoc inside of this macro.
         #[doc(hidden)]
-        mod vst3 {
+        mod vst3_factory {
             use ::std::collections::HashSet;
+            use ::std::ffi::c_void;
 
-            // `vst3_sys` is imported from the VST3 wrapper module
-            use $crate::wrapper::vst3::{vst3_sys, PluginInfo, Wrapper};
-            use vst3_sys::base::{kInvalidArgument, kResultOk, tresult};
-            use vst3_sys::base::{
-                FactoryFlags, IPluginFactory, IPluginFactory2, IPluginFactory3, IUnknown,
-                PClassInfo, PClassInfo2, PClassInfoW, PFactoryInfo,
-            };
-            use vst3_sys::VST3;
-
-            // This alias is needed for the VST3 attribute macro
-            use vst3_sys as vst3_com;
+            use $crate::wrapper::vst3::{PluginInfo, Wrapper};
+            use $crate::wrapper::vst3::vst3::{Class, ComWrapper, Steinberg::*};
 
             // Because the `$plugin_ty`s are likely defined in the enclosing scope. This works even
             // if the types are not public because this is a child module.
@@ -91,18 +83,22 @@ macro_rules! nice_export_vst3 {
             const PLUGIN_COUNT: usize = [$(stringify!($plugin_ty)),+].len();
 
             #[doc(hidden)]
-            #[VST3(implements(IPluginFactory, IPluginFactory2, IPluginFactory3))]
             pub struct Factory {
                 // This is a type erased version of the information stored on the plugin types
                 plugin_infos: [PluginInfo; PLUGIN_COUNT],
             }
 
+            impl Class for Factory {
+                type Interfaces = (IPluginFactory, IPluginFactory2, IPluginFactory3);
+            }
+
             impl Factory {
-                pub fn new() -> Box<Self> {
+                pub fn new() -> Factory {
                     let plugin_infos = [$(PluginInfo::for_plugin::<$plugin_ty>()),+];
 
                     if cfg!(debug_assertions) {
-                        let unique_cids: HashSet<[u8; 16]> = plugin_infos.iter().map(|d| *d.cid).collect();
+                        let unique_cids: HashSet<[u8; 16]> =
+                            plugin_infos.iter().map(|d| *d.cid).collect();
                         $crate::nice_debug_assert_eq!(
                             unique_cids.len(),
                             plugin_infos.len(),
@@ -110,12 +106,12 @@ macro_rules! nice_export_vst3 {
                         );
                     }
 
-                    Self::allocate(plugin_infos)
+                    Factory { plugin_infos }
                 }
             }
 
-            impl IPluginFactory for Factory {
-                unsafe fn get_factory_info(&self, info: *mut PFactoryInfo) -> tresult {
+            impl IPluginFactoryTrait for Factory {
+                unsafe fn getFactoryInfo(&self, info: *mut PFactoryInfo) -> tresult {
                     if info.is_null() {
                         return kInvalidArgument;
                     }
@@ -126,11 +122,11 @@ macro_rules! nice_export_vst3 {
                     kResultOk
                 }
 
-                unsafe fn count_classes(&self) -> i32 {
+                unsafe fn countClasses(&self) -> i32 {
                     self.plugin_infos.len() as i32
                 }
 
-                unsafe fn get_class_info(&self, index: i32, info: *mut PClassInfo) -> tresult {
+                unsafe fn getClassInfo(&self, index: i32, info: *mut PClassInfo) -> tresult {
                     if index < 0 || index >= self.plugin_infos.len() as i32 {
                         return kInvalidArgument;
                     }
@@ -140,17 +136,18 @@ macro_rules! nice_export_vst3 {
                     kResultOk
                 }
 
-                unsafe fn create_instance(
+                unsafe fn createInstance(
                     &self,
-                    cid: *const vst3_sys::IID,
-                    iid: *const vst3_sys::IID,
-                    obj: *mut *mut vst3_sys::c_void,
+                    cid: FIDString,
+                    iid: FIDString,
+                    obj: *mut *mut c_void,
                 ) -> tresult {
-                    // Can't use `check_null_ptr!()` here without polluting nice-plug's general
-                    // exports
                     if cid.is_null() || obj.is_null() {
                         return kInvalidArgument;
                     }
+
+                    let cid = *(cid as *const TUID);
+                    let cid_bytes: [u8; 16] = cid.map(|b| b as u8);
 
                     // This is a poor man's way of treating `$plugin_ty` like an indexable array.
                     // Assuming `self.plugin_infos` is in the same order, we can simply check all of
@@ -158,30 +155,20 @@ macro_rules! nice_export_vst3 {
                     let mut plugin_idx = 0;
                     $({
                         let plugin_info = &self.plugin_infos[plugin_idx];
-                        if unsafe { (*cid).data == *plugin_info.cid } {
-                            let wrapper = Wrapper::<$plugin_ty>::new();
-
+                        if cid_bytes == *plugin_info.cid {
+                            let instance = ComWrapper::new(Wrapper::<$plugin_ty>::new())
+                                .to_com_ptr::<FUnknown>()
+                                .unwrap();
+                            let ptr = instance.as_ptr();
                             // 99.999% of the times `iid` will be that of `IComponent`, but the
                             // caller is technically allowed to create an object for any support
                             // interface. We don't have a way to check whether our plugin supports
                             // the interface without creating it, but since the odds that a caller
                             // will create an object with an interface we don't support are
                             // basically zero this is not a problem.
-                            let result = unsafe { wrapper.query_interface(iid, obj) };
-                            if result == kResultOk {
-                                // This is a bit awkward now but if the cast succeeds we need to get
-                                // rid of the reference from the `wrapper` binding. The VST3 query
-                                // interface always increments the reference count and returns an
-                                // owned reference, so we need to explicitly release the reference
-                                // from `wrapper` and leak the `Box` so the wrapper doesn't
-                                // automatically get deallocated when this function returns (`Box`
-                                // is an incorrect choice on vst3-sys' part, it should have used a
-                                // `VstPtr` instead).
-                                unsafe { wrapper.release(); }
-                                Box::leak(wrapper);
-
-                                return kResultOk;
-                            }
+                            return unsafe {
+                                ((*(*ptr).vtbl).queryInterface)(ptr, iid as *mut TUID, obj)
+                            };
                         }
 
                         plugin_idx += 1;
@@ -191,8 +178,8 @@ macro_rules! nice_export_vst3 {
                 }
             }
 
-            impl IPluginFactory2 for Factory {
-                unsafe fn get_class_info2(&self, index: i32, info: *mut PClassInfo2) -> tresult {
+            impl IPluginFactory2Trait for Factory {
+                unsafe fn getClassInfo2(&self, index: i32, info: *mut PClassInfo2) -> tresult {
                     if index < 0 || index >= self.plugin_infos.len() as i32 {
                         return kInvalidArgument;
                     }
@@ -203,8 +190,8 @@ macro_rules! nice_export_vst3 {
                 }
             }
 
-            impl IPluginFactory3 for Factory {
-                unsafe fn get_class_info_unicode(
+            impl IPluginFactory3Trait for Factory {
+                unsafe fn getClassInfoUnicode(
                     &self,
                     index: i32,
                     info: *mut PClassInfoW,
@@ -218,7 +205,7 @@ macro_rules! nice_export_vst3 {
                     kResultOk
                 }
 
-                unsafe fn set_host_context(&self, _context: *mut vst3_sys::c_void) -> tresult {
+                unsafe fn setHostContext(&self, _context: *mut FUnknown) -> tresult {
                     // We don't need to do anything with this
                     kResultOk
                 }
@@ -227,10 +214,14 @@ macro_rules! nice_export_vst3 {
 
         /// The VST3 plugin factory entry point.
         #[unsafe(no_mangle)]
-        pub extern "system" fn GetPluginFactory() -> *mut ::std::ffi::c_void {
-            let factory = self::vst3::Factory::new();
+        pub extern "system" fn GetPluginFactory(
+        ) -> *mut $crate::wrapper::vst3::vst3::Steinberg::IPluginFactory {
+            use $crate::wrapper::vst3::vst3::{Class, ComWrapper, Steinberg::IPluginFactory};
 
-            Box::into_raw(factory) as *mut ::std::ffi::c_void
+            ComWrapper::new(self::vst3_factory::Factory::new())
+                .to_com_ptr::<IPluginFactory>()
+                .unwrap()
+                .into_raw()
         }
 
         // These two entry points are used on Linux, and they would theoretically also be used on

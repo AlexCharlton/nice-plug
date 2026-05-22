@@ -1,26 +1,17 @@
 use atomic_refcell::AtomicRefCell;
 use crossbeam::atomic::AtomicCell;
 use crossbeam::channel::{self, SendTimeoutError};
-use nice_plug_core::audio_setup::{AudioIOLayout, BufferConfig, ProcessMode};
-use nice_plug_core::context::gui::AsyncExecutor;
-use nice_plug_core::context::process::Transport;
-use nice_plug_core::editor::Editor;
-use nice_plug_core::midi::{MidiConfig, PluginNoteEvent};
-use nice_plug_core::params::internals::ParamPtr;
-use nice_plug_core::params::{ParamFlags, Params};
-use nice_plug_core::plugin::{Plugin, PluginState, ProcessStatus, TaskExecutor};
 use parking_lot::{Mutex, RwLock};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::time::Duration;
-use vst3_sys::base::{kInvalidArgument, kResultOk, tresult};
-use vst3_sys::vst::{IComponentHandler, RestartFlags};
+use vst3::{Steinberg::Vst::*, Steinberg::*};
 
 use super::context::{WrapperGuiContext, WrapperInitContext, WrapperProcessContext};
 use super::note_expressions::NoteExpressionController;
 use super::param_units::ParamUnits;
-use super::util::{ObjectPtr, VST3_MIDI_PARAMS_END, VST3_MIDI_PARAMS_START, VstPtr};
+use super::util::{VST3_MIDI_PARAMS_END, VST3_MIDI_PARAMS_START, VstPtr};
 use super::view::WrapperView;
 use crate::event_loop::{EventLoop, MainThreadExecutor, OsEventLoop};
 use crate::util::permit_alloc;
@@ -28,6 +19,16 @@ use crate::wrapper::state;
 use crate::wrapper::util::buffer_management::BufferManager;
 use crate::wrapper::util::{hash_param_id, process_wrapper};
 use crate::wrapper::vst3::Vst3Plugin;
+use nice_plug_core::audio_setup::{AudioIOLayout, BufferConfig, ProcessMode};
+use nice_plug_core::context::gui::AsyncExecutor;
+use nice_plug_core::context::process::Transport;
+use nice_plug_core::editor::Editor;
+use nice_plug_core::midi::MidiConfig;
+use nice_plug_core::midi::PluginNoteEvent;
+use nice_plug_core::params::internals::ParamPtr;
+use nice_plug_core::params::{ParamFlags, Params};
+use nice_plug_core::plugin::{Plugin, PluginState, ProcessStatus, TaskExecutor};
+use vst3::ComWrapper;
 
 /// The actual wrapper bits. We need this as an `Arc<T>` so we can safely use our event loop API.
 /// Since we can't combine that with VST3's interior reference counting this just has to be moved to
@@ -44,16 +45,15 @@ pub(crate) struct WrapperInner<P: Vst3Plugin> {
     /// The plugin's editor, if it has one. This object does not do anything on its own, but we need
     /// to instantiate this in advance so we don't need to lock the entire [`Plugin`] object when
     /// creating an editor. Wrapped in an `AtomicRefCell` because it needs to be initialized late.
-    #[allow(clippy::type_complexity)]
     pub editor: AtomicRefCell<Option<Arc<Mutex<Box<dyn Editor>>>>>,
 
     /// The host's [`IComponentHandler`] instance, if passed through
     /// [`IEditController::set_component_handler`].
-    pub component_handler: AtomicRefCell<Option<VstPtr<dyn IComponentHandler>>>,
+    pub component_handler: AtomicRefCell<Option<VstPtr<IComponentHandler>>>,
 
     /// Our own [`IPlugView`] instance. This is set while the editor is actually visible (which is
     /// different form the lifetime of [`WrapperView`][super::WrapperView] itself).
-    pub plug_view: RwLock<Option<ObjectPtr<WrapperView<P>>>>,
+    pub plug_view: RwLock<Option<ComWrapper<WrapperView<P>>>>,
 
     /// A realtime-safe task queue so the plugin can schedule tasks that need to be run later on the
     /// GUI thread. This field should not be used directly for posting tasks. This should be done
@@ -158,7 +158,7 @@ pub enum Task<P: Plugin> {
     /// since the task will be created from the audio thread.
     ParameterValueChanged(u32, f32),
     /// Trigger a restart with the given restart flags. This is a bit set of the flags from
-    /// [`vst3_sys::vst::RestartFlags`].
+    /// [`vst3::Steinberg::Vst::RestartFlags`].
     TriggerRestart(i32),
     /// Request the editor to be resized according to its current size. Right now there is no way to
     /// handle "denied resize" requests yet.
@@ -338,13 +338,9 @@ impl<P: Vst3Plugin> WrapperInner<P> {
             .lock()
             .editor(AsyncExecutor::new(
                 Arc::new({
-                    let wrapper = Arc::downgrade(&wrapper);
-                    move |task| {
-                        let wrapper = match wrapper.upgrade() {
-                            Some(wrapper) => wrapper,
-                            None => return,
-                        };
+                    let wrapper = wrapper.clone();
 
+                    move |task| {
                         let task_posted = wrapper.schedule_background(Task::PluginTask(task));
                         crate::nice_debug_assert!(
                             task_posted,
@@ -353,13 +349,9 @@ impl<P: Vst3Plugin> WrapperInner<P> {
                     }
                 }),
                 Arc::new({
-                    let wrapper = Arc::downgrade(&wrapper);
-                    move |task| {
-                        let wrapper = match wrapper.upgrade() {
-                            Some(wrapper) => wrapper,
-                            None => return,
-                        };
+                    let wrapper = wrapper.clone();
 
+                    move |task| {
                         let task_posted = wrapper.schedule_gui(Task::PluginTask(task));
                         crate::nice_debug_assert!(
                             task_posted,
@@ -544,7 +536,7 @@ impl<P: Vst3Plugin> WrapperInner<P> {
                 .as_ref()
                 .unwrap()
                 .schedule_gui(Task::TriggerRestart(
-                    RestartFlags::kParamValuesChanged as i32,
+                    RestartFlags_::kParamValuesChanged as i32,
                 ));
         crate::nice_debug_assert!(task_posted, "The task queue is full, dropping task...");
     }
@@ -554,7 +546,7 @@ impl<P: Vst3Plugin> WrapperInner<P> {
         let old_latency = self.current_latency.swap(samples, Ordering::SeqCst);
         if old_latency != samples {
             let task_posted =
-                self.schedule_gui(Task::TriggerRestart(RestartFlags::kLatencyChanged as i32));
+                self.schedule_gui(Task::TriggerRestart(RestartFlags_::kLatencyChanged as i32));
             crate::nice_debug_assert!(task_posted, "The task queue is full, dropping task...");
         }
     }
@@ -655,7 +647,7 @@ impl<P: Vst3Plugin> MainThreadExecutor<Task<P>> for WrapperInner<P> {
             Task::TriggerRestart(flags) => match &*self.component_handler.borrow() {
                 Some(handler) => unsafe {
                     crate::nice_debug_assert!(is_gui_thread);
-                    let result = handler.restart_component(flags);
+                    let result = handler.restartComponent(flags);
                     crate::nice_debug_assert_eq!(
                         result,
                         kResultOk,

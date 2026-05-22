@@ -1,4 +1,11 @@
 use atomic_refcell::AtomicRefMut;
+use std::cell::Cell;
+use std::collections::VecDeque;
+use std::sync::Arc;
+use std::sync::atomic::Ordering;
+use vst3::Steinberg::Vst::IComponentHandlerTrait;
+
+use crate::wrapper::vst3::Vst3Plugin;
 use nice_plug_core::{
     context::{
         PluginApi,
@@ -10,13 +17,6 @@ use nice_plug_core::{
     params::internals::ParamPtr,
     plugin::PluginState,
 };
-use std::cell::Cell;
-use std::collections::VecDeque;
-use std::sync::Arc;
-use std::sync::atomic::Ordering;
-use vst3_sys::vst::IComponentHandler;
-
-use crate::wrapper::vst3::Vst3Plugin;
 
 use super::inner::{Task, WrapperInner};
 
@@ -145,9 +145,9 @@ impl<P: Vst3Plugin> GuiContext for WrapperGuiContext<P> {
     unsafe fn raw_begin_set_parameter(&self, param: ParamPtr) {
         match &*self.inner.component_handler.borrow() {
             Some(handler) => match self.inner.param_ptr_to_hash.get(&param) {
-                Some(hash) => unsafe {
-                    handler.begin_edit(*hash);
-                },
+                Some(hash) => {
+                    handler.beginEdit(*hash);
+                }
                 None => crate::nice_debug_assert_failure!("Unknown parameter: {:?}", param),
             },
             None => crate::nice_debug_assert_failure!("Component handler not yet set"),
@@ -187,9 +187,7 @@ impl<P: Vst3Plugin> GuiContext for WrapperGuiContext<P> {
                         );
                     }
 
-                    unsafe {
-                        handler.perform_edit(*hash, normalized as f64);
-                    }
+                    handler.performEdit(*hash, normalized as f64);
                 }
                 None => crate::nice_debug_assert_failure!("Unknown parameter: {:?}", param),
             },
@@ -213,9 +211,9 @@ impl<P: Vst3Plugin> GuiContext for WrapperGuiContext<P> {
     unsafe fn raw_end_set_parameter(&self, param: ParamPtr) {
         match &*self.inner.component_handler.borrow() {
             Some(handler) => match self.inner.param_ptr_to_hash.get(&param) {
-                Some(hash) => unsafe {
-                    handler.end_edit(*hash);
-                },
+                Some(hash) => {
+                    handler.endEdit(*hash);
+                }
                 None => crate::nice_debug_assert_failure!("Unknown parameter: {:?}", param),
             },
             None => crate::nice_debug_assert_failure!("Component handler not yet set"),

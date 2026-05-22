@@ -1,13 +1,11 @@
 use std::cmp;
+use std::ffi::CStr;
 use std::ops::Deref;
-use vst3_sys::ComInterface;
-use vst3_sys::interfaces::IUnknown;
-use vst3_sys::vst::TChar;
+use vst3::{ComPtr, Interface, Steinberg::FIDString, Steinberg::Vst::TChar};
 use widestring::U16CString;
 
 /// When `Plugin::MIDI_INPUT` is set to `MidiConfig::MidiCCs` or higher then we'll register 130*16
 /// additional parameters to handle MIDI CCs, channel pressure, and pitch bend, in that order.
-/// vst3-sys doesn't expose these constants.
 pub const VST3_MIDI_CCS: u32 = 130;
 pub const VST3_MIDI_CHANNELS: u32 = 16;
 /// The number of parameters we'll need to register if the plugin accepts MIDI CCs.
@@ -59,62 +57,36 @@ pub fn u16strlcpy(dest: &mut [TChar], src: &str) {
     dest[copy_len] = 0;
 }
 
+/// Compare a host-provided [`FIDString`] to one of the SDK's string constants. These are plain C
+/// string pointers, so pointer equality is not sufficient.
+pub(crate) unsafe fn fid_matches(type_: FIDString, expected: FIDString) -> bool {
+    unsafe { !type_.is_null() && CStr::from_ptr(type_) == CStr::from_ptr(expected) }
+}
+
 /// Send+Sync wrapper for these interface pointers.
 #[repr(transparent)]
-pub struct VstPtr<T: vst3_sys::ComInterface + ?Sized> {
-    ptr: vst3_sys::VstPtr<T>,
+pub struct VstPtr<I: Interface> {
+    ptr: ComPtr<I>,
 }
 
-/// The same as [`VstPtr`] with shared semnatics, but for objects we defined ourself since `VstPtr`
-/// only works for interfaces.
-#[repr(transparent)]
-pub struct ObjectPtr<T: IUnknown> {
-    ptr: *const T,
-}
-
-impl<T: ComInterface + ?Sized> Deref for VstPtr<T> {
-    type Target = vst3_sys::VstPtr<T>;
+impl<I: Interface> Deref for VstPtr<I> {
+    type Target = ComPtr<I>;
 
     fn deref(&self) -> &Self::Target {
         &self.ptr
     }
 }
 
-impl<T: IUnknown> Deref for ObjectPtr<T> {
-    type Target = T;
-
-    fn deref(&self) -> &Self::Target {
-        unsafe { &*self.ptr }
-    }
-}
-
-impl<T: vst3_sys::ComInterface + ?Sized> From<vst3_sys::VstPtr<T>> for VstPtr<T> {
-    fn from(ptr: vst3_sys::VstPtr<T>) -> Self {
+impl<I: Interface> From<ComPtr<I>> for VstPtr<I> {
+    fn from(ptr: ComPtr<I>) -> Self {
         Self { ptr }
     }
 }
 
-impl<T: IUnknown> From<&T> for ObjectPtr<T> {
-    /// Create a smart pointer for an existing reference counted object.
-    fn from(obj: &T) -> Self {
-        unsafe { obj.add_ref() };
-        Self { ptr: obj }
-    }
-}
-
-impl<T: IUnknown> Drop for ObjectPtr<T> {
-    fn drop(&mut self) {
-        unsafe { (*self).release() };
-    }
-}
-
-/// SAFETY: Sharing these pointers across thread is s safe as they have internal atomic reference
+/// SAFETY: Sharing these pointers across thread is safe as they have internal atomic reference
 /// counting, so as long as a `VstPtr<T>` handle exists the object will stay alive.
-unsafe impl<T: ComInterface + ?Sized> Send for VstPtr<T> {}
-unsafe impl<T: ComInterface + ?Sized> Sync for VstPtr<T> {}
-
-unsafe impl<T: IUnknown> Send for ObjectPtr<T> {}
-unsafe impl<T: IUnknown> Sync for ObjectPtr<T> {}
+unsafe impl<I: Interface + Send + Sync> Send for VstPtr<I> {}
+unsafe impl<I: Interface + Send + Sync> Sync for VstPtr<I> {}
 
 #[cfg(test)]
 mod miri {
