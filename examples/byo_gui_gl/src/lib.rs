@@ -283,6 +283,7 @@ impl Editor for CustomGlEditor {
                     vsync: false,
                     ..Default::default()
                 }),
+                ..Default::default()
             },
             move |window: &mut baseview::Window<'_>| -> CustomGlWindow {
                 CustomGlWindow::new(

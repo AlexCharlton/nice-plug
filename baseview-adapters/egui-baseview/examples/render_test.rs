@@ -1,4 +1,4 @@
-use baseview::{Size, WindowOpenOptions, WindowScalePolicy};
+use baseview::{Size, WindowOpenOptions};
 use egui::Context;
 use egui_baseview::{EguiWindow, GraphicsConfig, Queue};
 
@@ -654,8 +654,7 @@ fn main() {
     let settings = WindowOpenOptions {
         title: String::from("egui-baseview hello world"),
         size: Size::new(1280.0, 720.0),
-        scale: WindowScalePolicy::SystemScaleFactor,
-        gl_config: None,
+        ..Default::default()
     };
 
     let state = ColorTest::default();

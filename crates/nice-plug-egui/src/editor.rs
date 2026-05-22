@@ -101,6 +101,7 @@ where
                 .map(|factor| WindowScalePolicy::ScaleFactor(factor as f64))
                 .unwrap_or(WindowScalePolicy::SystemScaleFactor),
             gl_config: Some(gl_config),
+            ..Default::default()
         };
 
         #[cfg(feature = "wgpu")]
