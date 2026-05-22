@@ -45,8 +45,6 @@ serde_json = "1.0"
 atomic_float = "1.1"
 atomic_refcell = "0.1"
 bitflags = "2.11"
-baseview = "0.1.1"
-#baseview = { git = "https://github.com/RustAudio/baseview.git", rev = "1ec490c99fa2bef0c3c81c4f42d0b7552412c50d", default-features = false }
 raw-window-handle = "0.5"
 realfft = "3.0"
 approx = "0.5.1"
@@ -60,6 +58,12 @@ parking_lot = "0.12"
 thiserror = "2.0"
 tracing = "0.1"
 egui = { version = "0.34.1", default-features = false, features = ["bytemuck"] }
+
+[workspace.dependencies.baseview]
+git = "https://github.com/AlexCharlton/baseview.git"
+# version = "0.1.1"
+# path = "../baseview"
+
 
 # Enable a small amount of optimization in the dev profile.
 [profile.dev]
