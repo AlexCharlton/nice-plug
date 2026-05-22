@@ -3,6 +3,7 @@
 
 pub mod clap;
 pub(crate) mod state;
+pub(crate) mod track_context;
 pub(crate) mod util;
 
 #[cfg(feature = "standalone")]

@@ -87,6 +87,10 @@ impl<P: Vst3Plugin> InitContext<P> for WrapperInitContext<'_, P> {
     fn set_current_voice_capacity(&self, _capacity: u32) {
         // This is only supported by CLAP
     }
+
+    fn track_name(&self) -> Option<String> {
+        self.inner.track_context.name()
+    }
 }
 
 impl<P: Vst3Plugin> ProcessContext<P> for WrapperProcessContext<'_, P> {
@@ -239,5 +243,9 @@ impl<P: Vst3Plugin> GuiContext for WrapperGuiContext<P> {
 
     fn set_state(&self, state: PluginState) {
         self.inner.set_state_object_from_gui(state)
+    }
+
+    fn track_name(&self) -> Option<String> {
+        self.inner.track_context.name()
     }
 }

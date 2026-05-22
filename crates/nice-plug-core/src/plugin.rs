@@ -214,6 +214,14 @@ pub trait Plugin: Default + Send + 'static {
         true
     }
 
+    /// Called when the host updates track or channel context information after
+    /// [`initialize()`][Self::initialize()] has already run, for instance when the user renames the
+    /// track. The default implementation does nothing.
+    ///
+    /// Depending on the host and plugin format, the track name may already be available inside
+    /// [`initialize()`][Self::initialize()] through [`InitContext::track_name()`][crate::context::init::InitContext::track_name].
+    fn track_context_changed(&mut self, _context: &mut impl InitContext<Self>) {}
+
     /// Clear internal state such as filters and envelopes. This is always called after
     /// [`initialize()`][Self::initialize()], and it may also be called at any other time from the
     /// audio thread. You should thus not do any allocations in this function.

@@ -96,6 +96,11 @@ impl<P: ClapPlugin> InitContext<P> for WrapperInitContext<'_, P> {
     fn set_current_voice_capacity(&self, capacity: u32) {
         self.wrapper.set_current_voice_capacity(capacity)
     }
+
+    fn track_name(&self) -> Option<String> {
+        self.wrapper.refresh_track_info_from_host();
+        self.wrapper.track_context.name()
+    }
 }
 
 impl<P: ClapPlugin> ProcessContext<P> for WrapperProcessContext<'_, P> {
@@ -250,6 +255,11 @@ impl<P: ClapPlugin> GuiContext for WrapperGuiContext<P> {
 
     fn set_state(&self, state: PluginState) {
         self.wrapper.set_state_object_from_gui(state)
+    }
+
+    fn track_name(&self) -> Option<String> {
+        self.wrapper.refresh_track_info_from_host();
+        self.wrapper.track_context.name()
     }
 }
 

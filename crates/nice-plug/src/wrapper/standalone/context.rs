@@ -56,6 +56,10 @@ impl<P: Plugin, B: Backend<P>> InitContext<P> for WrapperInitContext<'_, P, B> {
     fn set_current_voice_capacity(&self, _capacity: u32) {
         // This is only supported by CLAP
     }
+
+    fn track_name(&self) -> Option<String> {
+        None
+    }
 }
 
 impl<P: Plugin, B: Backend<P>> ProcessContext<P> for WrapperProcessContext<'_, P, B> {
@@ -166,5 +170,9 @@ impl<P: Plugin, B: Backend<P>> GuiContext for WrapperGuiContext<P, B> {
 
     fn set_state(&self, state: PluginState) {
         self.wrapper.set_state_object_from_gui(state)
+    }
+
+    fn track_name(&self) -> Option<String> {
+        None
     }
 }

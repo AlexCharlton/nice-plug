@@ -67,6 +67,14 @@ pub trait GuiContext: Send + Sync + 'static {
     /// host. If the plugin is currently processing audio, then the parameter values will be
     /// restored at the end of the current processing cycle.
     fn set_state(&self, state: PluginState);
+
+    /// Returns the display name of the track this plugin instance is on, if the host provides that
+    /// information.
+    ///
+    /// See [`InitContext::track_name()`][crate::context::init::InitContext::track_name] for details.
+    fn track_name(&self) -> Option<String> {
+        None
+    }
 }
 
 /// An way to run background tasks from the plugin's GUI, equivalent to the

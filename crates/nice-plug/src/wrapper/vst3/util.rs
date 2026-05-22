@@ -1,8 +1,38 @@
 use std::cmp;
 use std::ffi::CStr;
+use std::mem;
 use std::ops::Deref;
-use vst3::{ComPtr, Interface, Steinberg::FIDString, Steinberg::Vst::TChar};
-use widestring::U16CString;
+use vst3::{ComPtr, ComRef, Interface, Steinberg::*, Steinberg::FIDString, Steinberg::Vst::*};
+use widestring::{U16CStr, U16CString};
+
+/// Parse the channel (track) name from a VST3 channel context attribute list.
+pub(crate) unsafe fn channel_name_from_attribute_list(
+    list: *mut IAttributeList,
+) -> Option<String> {
+    if list.is_null() {
+        return None;
+    }
+
+    let list = ComRef::from_raw(list)?;
+    let mut name_buf: String128 = mem::zeroed();
+    if list.getString(
+        ChannelContext::kChannelNameKey,
+        name_buf.as_mut_ptr(),
+        mem::size_of::<String128>() as u32,
+    ) != kResultTrue
+    {
+        return None;
+    }
+
+    let name = U16CStr::from_ptr_str(name_buf.as_ptr() as *const u16)
+        .to_string()
+        .ok()?;
+    if name.is_empty() {
+        None
+    } else {
+        Some(name)
+    }
+}
 
 /// When `Plugin::MIDI_INPUT` is set to `MidiConfig::MidiCCs` or higher then we'll register 130*16
 /// additional parameters to handle MIDI CCs, channel pressure, and pitch bend, in that order.

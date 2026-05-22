@@ -47,6 +47,10 @@ use clap_sys::ext::render::{
 use clap_sys::ext::state::{CLAP_EXT_STATE, clap_plugin_state};
 use clap_sys::ext::tail::{CLAP_EXT_TAIL, clap_plugin_tail};
 use clap_sys::ext::thread_check::{CLAP_EXT_THREAD_CHECK, clap_host_thread_check};
+use clap_sys::ext::track_info::{
+    CLAP_EXT_TRACK_INFO, CLAP_EXT_TRACK_INFO_COMPAT, clap_host_track_info, clap_plugin_track_info,
+    clap_track_info,
+};
 use clap_sys::ext::voice_info::{
     CLAP_EXT_VOICE_INFO, CLAP_VOICE_INFO_SUPPORTS_OVERLAPPING_NOTES, clap_host_voice_info,
     clap_plugin_voice_info, clap_voice_info,
@@ -96,6 +100,7 @@ use crate::wrapper::clap::ClapPlugin;
 use crate::wrapper::clap::context::RemoteControlPages;
 use crate::wrapper::clap::util::{read_stream, write_stream};
 use crate::wrapper::state::{self};
+use crate::wrapper::track_context::{SharedTrackContext, name_from_clap_track_info};
 use crate::wrapper::util::buffer_management::{BufferManager, ChannelPointers};
 use crate::wrapper::util::{
     clamp_input_event_timing, clamp_output_event_timing, hash_param_id, process_wrapper, strlcpy,
@@ -247,6 +252,10 @@ pub struct Wrapper<P: ClapPlugin> {
 
     clap_plugin_voice_info: clap_plugin_voice_info,
     host_voice_info: AtomicRefCell<Option<ClapPtr<clap_host_voice_info>>>,
+
+    clap_plugin_track_info: clap_plugin_track_info,
+    host_track_info: AtomicRefCell<Option<ClapPtr<clap_host_track_info>>>,
+    pub(crate) track_context: Arc<SharedTrackContext>,
     /// If `P::CLAP_POLY_MODULATION_CONFIG` is set, then the plugin can configure the current number
     /// of active voices using a context method called from the initialization or processing
     /// context. This defaults to the maximum number of voices.
@@ -691,6 +700,13 @@ impl<P: ClapPlugin> Wrapper<P> {
                 get: Some(Self::ext_voice_info_get),
             },
             host_voice_info: AtomicRefCell::new(None),
+
+            clap_plugin_track_info: clap_plugin_track_info {
+                changed: Some(Self::ext_track_info_changed),
+            },
+            host_track_info: AtomicRefCell::new(None),
+            track_context: SharedTrackContext::new(),
+
             current_voice_capacity: AtomicU32::new(
                 P::CLAP_POLY_MODULATION_CONFIG
                     .map(|c| {
@@ -761,6 +777,22 @@ impl<P: ClapPlugin> Wrapper<P> {
             .map(Mutex::new);
 
         wrapper
+    }
+
+    pub(crate) fn refresh_track_info_from_host(&self) {
+        let host_track_info = self.host_track_info.borrow();
+        let Some(host_track_info) = host_track_info.as_ref() else {
+            return;
+        };
+
+        let mut info: clap_track_info = unsafe { std::mem::zeroed() };
+        let success = unsafe_clap_call! {
+            host_track_info=>get(&*self.host_callback, &mut info)
+        };
+        if success {
+            self.track_context
+                .set_name(name_from_clap_track_info(&info));
+        }
     }
 
     fn make_gui_context(self: Arc<Self>) -> Arc<WrapperGuiContext<P>> {
@@ -1943,6 +1975,18 @@ impl<P: ClapPlugin> Wrapper<P> {
                 &wrapper.host_callback,
                 CLAP_EXT_THREAD_CHECK,
             );
+            *wrapper.host_track_info.borrow_mut() =
+                query_host_extension::<clap_host_track_info>(
+                    &wrapper.host_callback,
+                    CLAP_EXT_TRACK_INFO,
+                )
+                .or_else(|| {
+                    query_host_extension::<clap_host_track_info>(
+                        &wrapper.host_callback,
+                        CLAP_EXT_TRACK_INFO_COMPAT,
+                    )
+                });
+            wrapper.refresh_track_info_from_host();
         }
 
         true
@@ -1985,6 +2029,8 @@ impl<P: ClapPlugin> Wrapper<P> {
                 unsafe_clap_call! { host_latency=>changed(&*wrapper.host_callback) };
             }
         }
+
+        wrapper.refresh_track_info_from_host();
 
         // NOTE: This needs to be dropped after the `plugin` lock to avoid deadlocks
         let mut init_context = wrapper.make_init_context();
@@ -2457,9 +2503,24 @@ impl<P: ClapPlugin> Wrapper<P> {
             &wrapper.clap_plugin_tail as *const _ as *const c_void
         } else if id == CLAP_EXT_VOICE_INFO && P::CLAP_POLY_MODULATION_CONFIG.is_some() {
             &wrapper.clap_plugin_voice_info as *const _ as *const c_void
+        } else if id == CLAP_EXT_TRACK_INFO || id == CLAP_EXT_TRACK_INFO_COMPAT {
+            &wrapper.clap_plugin_track_info as *const _ as *const c_void
         } else {
             crate::nice_trace!("Host tried to query unknown extension {:?}", id);
             std::ptr::null()
+        }
+    }
+
+    unsafe extern "C" fn ext_track_info_changed(plugin: *const clap_plugin) {
+        check_null_ptr!((), plugin, unsafe { (*plugin).plugin_data });
+        let wrapper = unsafe { &*((*plugin).plugin_data as *const Self) };
+
+        wrapper.refresh_track_info_from_host();
+
+        if wrapper.current_buffer_config.load().is_some() {
+            let mut init_context = wrapper.make_init_context();
+            let mut plugin = wrapper.plugin.lock();
+            plugin.track_context_changed(&mut init_context);
         }
     }
 

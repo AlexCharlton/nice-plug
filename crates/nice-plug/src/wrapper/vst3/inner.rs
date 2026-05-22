@@ -16,6 +16,7 @@ use super::view::WrapperView;
 use crate::event_loop::{EventLoop, MainThreadExecutor, OsEventLoop};
 use crate::util::permit_alloc;
 use crate::wrapper::state;
+use crate::wrapper::track_context::SharedTrackContext;
 use crate::wrapper::util::buffer_management::BufferManager;
 use crate::wrapper::util::{hash_param_id, process_wrapper};
 use crate::wrapper::vst3::Vst3Plugin;
@@ -67,8 +68,11 @@ pub(crate) struct WrapperInner<P: Vst3Plugin> {
     pub event_loop: AtomicRefCell<Option<OsEventLoop<Task<P>, Self>>>,
 
     /// Whether the plugin is currently processing audio. In other words, the last state
-    /// `IAudioProcessor::setActive()` has been called with.
+    /// `IAudioProcessor::setProcessing()` has been called with.
     pub is_processing: AtomicBool,
+    /// Whether [`Plugin::initialize()`][Plugin::initialize] has completed successfully, i.e. the
+    /// last call to `IComponent::setActive(true)` succeeded.
+    pub is_active: AtomicBool,
     /// The current audio IO layout. Modified through `IAudioProcessor::setBusArrangements()` after
     /// matching the proposed bus arrangement to one of the supported ones. The plugin's first audio
     /// IO layout is chosen as the default. Because of the way VST3 works it's not possible to
@@ -143,6 +147,10 @@ pub(crate) struct WrapperInner<P: Vst3Plugin> {
     /// having to add a setter function to the parameter (or even worse, have it be completely
     /// untyped).
     pub param_ptr_to_hash: HashMap<ParamPtr, u32>,
+
+    /// The display name of the track/channel this plugin instance is on, when provided by the host
+    /// through VST3's channel context interface.
+    pub track_context: Arc<SharedTrackContext>,
 }
 
 /// Tasks that can be sent from the plugin to be executed on the main thread in a non-blocking
@@ -280,6 +288,8 @@ impl<P: Vst3Plugin> WrapperInner<P> {
             .map(|(_, hash, ptr, _)| (ptr, hash))
             .collect();
 
+        let track_context = SharedTrackContext::new();
+
         let wrapper = Arc::new(Self {
             plugin: Mutex::new(plugin),
             task_executor,
@@ -294,6 +304,7 @@ impl<P: Vst3Plugin> WrapperInner<P> {
             event_loop: AtomicRefCell::new(None),
 
             is_processing: AtomicBool::new(false),
+            is_active: AtomicBool::new(false),
             // Some hosts, like the current version of Bitwig and Ardour at the time of writing,
             // will try using the plugin's default not yet initialized bus arrangement. Because of
             // that, we'll always initialize this configuration even before the host requests a
@@ -324,6 +335,7 @@ impl<P: Vst3Plugin> WrapperInner<P> {
             param_units,
             param_id_to_hash,
             param_ptr_to_hash,
+            track_context,
         });
 
         // FIXME: Right now this is safe, but if we are going to have a singleton main thread queue
