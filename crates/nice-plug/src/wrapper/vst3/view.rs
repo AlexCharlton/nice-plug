@@ -131,7 +131,11 @@ fn vst3_modifiers(raw: i16) -> Modifiers {
 // Thanks for putting this behind a platform-specific ifdef...
 // NOTE: This should also be used on the BSDs, but the Linux interfaces are only exposed on Linux
 #[cfg(target_os = "linux")]
-use {crate::event_loop::TASK_QUEUE_CAPACITY, crossbeam::queue::ArrayQueue, libc};
+use {
+    crate::event_loop::{EventLoop, MainThreadExecutor, TASK_QUEUE_CAPACITY},
+    crossbeam::queue::ArrayQueue,
+    libc,
+};
 
 /// FIXME: We need a separate wrapper type because we cannot conditionally define fields with
 ///        `#[cfg()]`, and the event handler interface is only available on Linux.

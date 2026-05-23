@@ -28,7 +28,7 @@ jobs:
         if: startsWith(matrix.os, 'ubuntu')
         run: |
           sudo apt-get update
-          sudo apt-get install -y libasound2-dev libgl-dev libjack-dev libx11-xcb-dev  libxcb1-dev libxcb-dri2-0-dev libxcb-icccm4-dev libxcursor-dev libxkbcommon-dev libxcb-shape0-dev libxcb-xfixes0-dev
+          sudo apt-get install -y libasound2-dev libgl-dev libjack-dev libx11-xcb-dev libxcb1-dev libxcb-dri2-0-dev libxcb-ewmh-dev libxcb-icccm4-dev libxcursor-dev libxkbcommon-dev libxcb-shape0-dev libxcb-xfixes0-dev
 
       - uses: actions/cache@v4
         # FIXME: Caching `target/` causes the Windows runner to blow up after some time
@@ -38,7 +38,9 @@ jobs:
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
-          key: ${{ matrix.name }}-${{ matrix.cross-target }}
+          key: test-${{ matrix.os }}-registry-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            test-${{ matrix.os }}-registry-
       - uses: actions/cache@v4
         if: "!startsWith(matrix.os, 'windows')"
         with:
@@ -47,7 +49,9 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-          key: ${{ matrix.name }}-${{ matrix.cross-target }}
+          key: test-${{ matrix.os }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            test-${{ matrix.os }}-
 
       - name: Set up Rust toolchain
         # Needed for SIMD
@@ -70,7 +74,7 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libasound2-dev libgl-dev libjack-dev libx11-xcb-dev  libxcb1-dev libxcb-dri2-0-dev libxcb-icccm4-dev libxcursor-dev libxkbcommon-dev libxcb-shape0-dev libxcb-xfixes0-dev
+          sudo apt-get install -y libasound2-dev libgl-dev libjack-dev libx11-xcb-dev libxcb1-dev libxcb-dri2-0-dev libxcb-ewmh-dev libxcb-icccm4-dev libxcursor-dev libxkbcommon-dev libxcb-shape0-dev libxcb-xfixes0-dev
 
       - uses: actions/cache@v4
         with:
@@ -79,7 +83,9 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-          key: build-without-vst3-ubuntu
+          key: build-without-vst3-ubuntu-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            build-without-vst3-ubuntu-
 
       - name: Set up Rust toolchain
         # Needed for SIMD
