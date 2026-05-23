@@ -244,7 +244,7 @@ impl<P: Vst3Plugin> WrapperView<P> {
     ///
     /// May cause memory corruption in Linux REAPER when called from outside of the `IRunLoop`.
     #[must_use]
-    pub unsafe fn request_resize(&self) -> bool {
+    pub unsafe fn request_resize(&self) -> bool { unsafe {
         // Don't do anything if the editor is not open, because that would be strange
         if self
             .editor_handle
@@ -284,7 +284,7 @@ impl<P: Vst3Plugin> WrapperView<P> {
             }
             None => false,
         }
-    }
+    }}
 
     /// If the host supports `IRunLoop`, then this will post the task to a task queue that will be
     /// run on the host's UI thread. If not, then this will return an `Err` value containing the
@@ -450,7 +450,7 @@ impl<P: Vst3Plugin> IPlugViewTrait for WrapperView<P> {
     }
 
     #[cfg(target_os = "windows")]
-    unsafe fn isPlatformTypeSupported(&self, r#type: FIDString) -> tresult {
+    unsafe fn isPlatformTypeSupported(&self, r#type: FIDString) -> tresult { unsafe {
         if fid_matches(r#type, kPlatformTypeHWND) {
             kResultOk
         } else {
@@ -460,9 +460,9 @@ impl<P: Vst3Plugin> IPlugViewTrait for WrapperView<P> {
             );
             kResultFalse
         }
-    }
+    }}
 
-    unsafe fn attached(&self, parent: *mut c_void, r#type: FIDString) -> tresult {
+    unsafe fn attached(&self, parent: *mut c_void, r#type: FIDString) -> tresult { unsafe {
         let mut editor_handle = self.editor_handle.write();
         if editor_handle.is_none() {
             let parent_handle = if fid_matches(r#type, kPlatformTypeX11EmbedWindowID) {
@@ -494,7 +494,7 @@ impl<P: Vst3Plugin> IPlugViewTrait for WrapperView<P> {
 
             kResultFalse
         }
-    }
+    }}
 
     unsafe fn removed(&self) -> tresult {
         let mut editor_handle = self.editor_handle.write();
@@ -526,7 +526,7 @@ impl<P: Vst3Plugin> IPlugViewTrait for WrapperView<P> {
         self.dispatch_virtual_key(keyCode, false, modifiers)
     }
 
-    unsafe fn getSize(&self, size: *mut ViewRect) -> tresult {
+    unsafe fn getSize(&self, size: *mut ViewRect) -> tresult { unsafe {
         check_null_ptr!(size);
 
         *size = mem::zeroed();
@@ -543,9 +543,9 @@ impl<P: Vst3Plugin> IPlugViewTrait for WrapperView<P> {
         size.bottom = (unscaled_height as f32 * scaling_factor).round() as i32;
 
         kResultOk
-    }
+    }}
 
-    unsafe fn onSize(&self, newSize: *mut ViewRect) -> tresult {
+    unsafe fn onSize(&self, newSize: *mut ViewRect) -> tresult { unsafe {
         check_null_ptr!(newSize);
 
         // TODO: Implement Host->Plugin resizing
@@ -563,7 +563,7 @@ impl<P: Vst3Plugin> IPlugViewTrait for WrapperView<P> {
         } else {
             kResultFalse
         }
-    }
+    }}
 
     unsafe fn onFocus(&self, _state: TBool) -> tresult {
         kNotImplemented
@@ -603,7 +603,7 @@ impl<P: Vst3Plugin> IPlugViewTrait for WrapperView<P> {
         kResultFalse
     }
 
-    unsafe fn checkSizeConstraint(&self, rect: *mut ViewRect) -> tresult {
+    unsafe fn checkSizeConstraint(&self, rect: *mut ViewRect) -> tresult { unsafe {
         check_null_ptr!(rect);
 
         // TODO: Implement Host->Plugin resizing
@@ -612,7 +612,7 @@ impl<P: Vst3Plugin> IPlugViewTrait for WrapperView<P> {
         } else {
             kResultFalse
         }
-    }
+    }}
 }
 
 impl<P: Vst3Plugin> IPlugViewContentScaleSupportTrait for WrapperView<P> {

@@ -8,7 +8,7 @@ use widestring::{U16CStr, U16CString};
 /// Parse the channel (track) name from a VST3 channel context attribute list.
 pub(crate) unsafe fn channel_name_from_attribute_list(
     list: *mut IAttributeList,
-) -> Option<String> {
+) -> Option<String> { unsafe {
     if list.is_null() {
         return None;
     }
@@ -32,7 +32,7 @@ pub(crate) unsafe fn channel_name_from_attribute_list(
     } else {
         Some(name)
     }
-}
+}}
 
 /// When `Plugin::MIDI_INPUT` is set to `MidiConfig::MidiCCs` or higher then we'll register 130*16
 /// additional parameters to handle MIDI CCs, channel pressure, and pitch bend, in that order.

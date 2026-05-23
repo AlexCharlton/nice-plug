@@ -146,7 +146,7 @@ impl<P: Vst3Plugin> GuiContext for WrapperGuiContext<P> {
 
     // All of these functions are supposed to be called from the main thread, so we'll put some
     // trust in the caller and assume that this is indeed the case
-    unsafe fn raw_begin_set_parameter(&self, param: ParamPtr) {
+    unsafe fn raw_begin_set_parameter(&self, param: ParamPtr) { unsafe {
         match &*self.inner.component_handler.borrow() {
             Some(handler) => match self.inner.param_ptr_to_hash.get(&param) {
                 Some(hash) => {
@@ -167,9 +167,9 @@ impl<P: Vst3Plugin> GuiContext for WrapperGuiContext<P> {
                 "raw_begin_set_parameter() called with an unknown ParamPtr"
             ),
         }
-    }
+    }}
 
-    unsafe fn raw_set_parameter_normalized(&self, param: ParamPtr, normalized: f32) {
+    unsafe fn raw_set_parameter_normalized(&self, param: ParamPtr, normalized: f32) { unsafe {
         match &*self.inner.component_handler.borrow() {
             Some(handler) => match self.inner.param_ptr_to_hash.get(&param) {
                 Some(hash) => {
@@ -210,9 +210,9 @@ impl<P: Vst3Plugin> GuiContext for WrapperGuiContext<P> {
                 )
             }
         }
-    }
+    }}
 
-    unsafe fn raw_end_set_parameter(&self, param: ParamPtr) {
+    unsafe fn raw_end_set_parameter(&self, param: ParamPtr) { unsafe {
         match &*self.inner.component_handler.borrow() {
             Some(handler) => match self.inner.param_ptr_to_hash.get(&param) {
                 Some(hash) => {
@@ -235,7 +235,7 @@ impl<P: Vst3Plugin> GuiContext for WrapperGuiContext<P> {
                 )
             }
         }
-    }
+    }}
 
     fn get_state(&self) -> PluginState {
         self.inner.get_state_object()

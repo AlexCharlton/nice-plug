@@ -189,7 +189,7 @@ unsafe extern "system" fn window_proc(
     message: u32,
     wparam: WPARAM,
     lparam: LPARAM,
-) -> LRESULT {
+) -> LRESULT { unsafe {
     match message {
         WM_CREATE => {
             let create_params = lparam.0 as *const CREATESTRUCTA;
@@ -224,4 +224,4 @@ unsafe extern "system" fn window_proc(
     }
 
     DefWindowProcA(handle, message, wparam, lparam)
-}
+}}

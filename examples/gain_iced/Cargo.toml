@@ -15,6 +15,10 @@ publish = false
 # The `lib` artifact is needed for the standalone target
 crate-type = ["cdylib", "lib"]
 
+[[bin]]
+name = "gain_iced_standalone"
+path = "src/main.rs"
+
 [dependencies]
 nice-plug = { path = "../../crates/nice-plug", default-features = true, features = [
     "assert_process_allocs",

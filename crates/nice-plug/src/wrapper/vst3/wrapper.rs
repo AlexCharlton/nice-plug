@@ -128,7 +128,7 @@ impl<P: Vst3Plugin> IComponentTrait for Wrapper<P> {
         dir: BusDirection,
         index: i32,
         info: *mut BusInfo,
-    ) -> tresult {
+    ) -> tresult { unsafe {
         check_null_ptr!(info);
 
         let current_audio_io_layout = self.inner.current_audio_io_layout.load();
@@ -246,13 +246,13 @@ impl<P: Vst3Plugin> IComponentTrait for Wrapper<P> {
             }
             _ => kInvalidArgument,
         }
-    }
+    }}
 
     unsafe fn getRoutingInfo(
         &self,
         in_info: *mut RoutingInfo,
         out_info: *mut RoutingInfo,
-    ) -> tresult {
+    ) -> tresult { unsafe {
         check_null_ptr!(in_info, out_info);
 
         let current_audio_io_layout = self.inner.current_audio_io_layout.load();
@@ -287,7 +287,7 @@ impl<P: Vst3Plugin> IComponentTrait for Wrapper<P> {
             }
             _ => kResultFalse,
         }
-    }
+    }}
 
     unsafe fn activateBus(
         &self,
@@ -397,10 +397,10 @@ impl<P: Vst3Plugin> IComponentTrait for Wrapper<P> {
         }
     }
 
-    unsafe fn setState(&self, state: *mut IBStream) -> tresult {
+    unsafe fn setState(&self, state: *mut IBStream) -> tresult { unsafe {
         check_null_ptr!(state);
 
-        let Some(state) = (unsafe { ComRef::from_raw(state) }) else {
+        let Some(state) = ComRef::from_raw(state) else {
             return kInvalidArgument;
         };
 
@@ -454,12 +454,12 @@ impl<P: Vst3Plugin> IComponentTrait for Wrapper<P> {
             }
             None => kResultFalse,
         }
-    }
+    }}
 
-    unsafe fn getState(&self, state: *mut IBStream) -> tresult {
+    unsafe fn getState(&self, state: *mut IBStream) -> tresult { unsafe {
         check_null_ptr!(state);
 
-        let Some(state) = (unsafe { ComRef::from_raw(state) }) else {
+        let Some(state) = ComRef::from_raw(state) else {
             return kInvalidArgument;
         };
 
@@ -488,7 +488,7 @@ impl<P: Vst3Plugin> IComponentTrait for Wrapper<P> {
                 kResultFalse
             }
         }
-    }
+    }}
 }
 
 impl<P: Vst3Plugin> IEditControllerTrait for Wrapper<P> {
@@ -518,7 +518,7 @@ impl<P: Vst3Plugin> IEditControllerTrait for Wrapper<P> {
         }
     }
 
-    unsafe fn getParameterInfo(&self, param_index: i32, info: *mut ParameterInfo) -> tresult {
+    unsafe fn getParameterInfo(&self, param_index: i32, info: *mut ParameterInfo) -> tresult { unsafe {
         check_null_ptr!(info);
 
         if param_index < 0 || param_index > self.getParameterCount() {
@@ -582,14 +582,14 @@ impl<P: Vst3Plugin> IEditControllerTrait for Wrapper<P> {
         }
 
         kResultOk
-    }
+    }}
 
     unsafe fn getParamStringByValue(
         &self,
         id: u32,
         value_normalized: f64,
         string: *mut String128,
-    ) -> tresult {
+    ) -> tresult { unsafe {
         check_null_ptr!(string);
 
         let dest = &mut *string;
@@ -607,14 +607,14 @@ impl<P: Vst3Plugin> IEditControllerTrait for Wrapper<P> {
             }
             _ => kInvalidArgument,
         }
-    }
+    }}
 
     unsafe fn getParamValueByString(
         &self,
         id: u32,
         string: *mut TChar,
         value_normalized: *mut f64,
-    ) -> tresult {
+    ) -> tresult { unsafe {
         check_null_ptr!(string, value_normalized);
 
         let string = match U16CStr::from_ptr_str(string).to_string() {
@@ -634,28 +634,28 @@ impl<P: Vst3Plugin> IEditControllerTrait for Wrapper<P> {
             }
             _ => kInvalidArgument,
         }
-    }
+    }}
 
-    unsafe fn normalizedParamToPlain(&self, id: u32, value_normalized: f64) -> f64 {
+    unsafe fn normalizedParamToPlain(&self, id: u32, value_normalized: f64) -> f64 { unsafe {
         match self.inner.param_by_hash.get(&id) {
             Some(param_ptr) => param_ptr.preview_plain(value_normalized as f32) as f64,
             _ => value_normalized,
         }
-    }
+    }}
 
-    unsafe fn plainParamToNormalized(&self, id: u32, plain_value: f64) -> f64 {
+    unsafe fn plainParamToNormalized(&self, id: u32, plain_value: f64) -> f64 { unsafe {
         match self.inner.param_by_hash.get(&id) {
             Some(param_ptr) => param_ptr.preview_normalized(plain_value as f32) as f64,
             _ => plain_value,
         }
-    }
+    }}
 
-    unsafe fn getParamNormalized(&self, id: u32) -> f64 {
+    unsafe fn getParamNormalized(&self, id: u32) -> f64 { unsafe {
         match self.inner.param_by_hash.get(&id) {
             Some(param_ptr) => param_ptr.modulated_normalized_value() as f64,
             _ => 0.5,
         }
-    }
+    }}
 
     unsafe fn setParamNormalized(&self, id: u32, value: f64) -> tresult {
         // If the plugin is currently processing audio, then this parameter change will also be sent
@@ -700,7 +700,7 @@ impl<P: Vst3Plugin> IEditControllerTrait for Wrapper<P> {
 }
 
 impl<P: Vst3Plugin> ChannelContext::IInfoListenerTrait for Wrapper<P> {
-    unsafe fn setChannelContextInfos(&self, list: *mut IAttributeList) -> tresult {
+    unsafe fn setChannelContextInfos(&self, list: *mut IAttributeList) -> tresult { unsafe {
         let Some(name) = channel_name_from_attribute_list(list) else {
             return kResultOk;
         };
@@ -714,7 +714,7 @@ impl<P: Vst3Plugin> ChannelContext::IInfoListenerTrait for Wrapper<P> {
         }
 
         kResultOk
-    }
+    }}
 }
 
 impl<P: Vst3Plugin> IAudioProcessorTrait for Wrapper<P> {
@@ -724,7 +724,7 @@ impl<P: Vst3Plugin> IAudioProcessorTrait for Wrapper<P> {
         num_ins: i32,
         outputs: *mut SpeakerArrangement,
         num_outs: i32,
-    ) -> tresult {
+    ) -> tresult { unsafe {
         check_null_ptr!(inputs, outputs);
 
         // Why are these signed integers again?
@@ -803,14 +803,14 @@ impl<P: Vst3Plugin> IAudioProcessorTrait for Wrapper<P> {
             }
             None => kResultFalse,
         }
-    }
+    }}
 
     unsafe fn getBusArrangement(
         &self,
         dir: BusDirection,
         index: i32,
         arr: *mut SpeakerArrangement,
-    ) -> tresult {
+    ) -> tresult { unsafe {
         check_null_ptr!(arr);
 
         let channel_count_to_map = |count| match count {
@@ -862,7 +862,7 @@ impl<P: Vst3Plugin> IAudioProcessorTrait for Wrapper<P> {
         *arr = channel_map;
 
         kResultOk
-    }
+    }}
 
     unsafe fn canProcessSampleSize(&self, symbolic_sample_size: i32) -> tresult {
         if symbolic_sample_size == SymbolicSampleSizes_::kSample32 as i32 {
@@ -876,7 +876,7 @@ impl<P: Vst3Plugin> IAudioProcessorTrait for Wrapper<P> {
         self.inner.current_latency.load(Ordering::SeqCst)
     }
 
-    unsafe fn setupProcessing(&self, setup: *mut ProcessSetup) -> tresult {
+    unsafe fn setupProcessing(&self, setup: *mut ProcessSetup) -> tresult { unsafe {
         check_null_ptr!(setup);
 
         // There's no special handling for offline processing at the moment
@@ -912,7 +912,7 @@ impl<P: Vst3Plugin> IAudioProcessorTrait for Wrapper<P> {
         // still change the channel layouts at this point
 
         kResultOk
-    }
+    }}
 
     unsafe fn setProcessing(&self, state: TBool) -> tresult {
         let state = state != 0;
@@ -949,7 +949,7 @@ impl<P: Vst3Plugin> IAudioProcessorTrait for Wrapper<P> {
 
     // Clippy doesn't understand our `event_start_idx`
     #[allow(clippy::mut_range_bound)]
-    unsafe fn process(&self, data: *mut ProcessData) -> tresult {
+    unsafe fn process(&self, data: *mut ProcessData) -> tresult { unsafe {
         check_null_ptr!(data);
 
         // Panic on allocations if the `assert_process_allocs` feature has been enabled, and make
@@ -1701,7 +1701,7 @@ impl<P: Vst3Plugin> IAudioProcessorTrait for Wrapper<P> {
 
             result
         })
-    }
+    }}
 
     unsafe fn getTailSamples(&self) -> u32 {
         // https://github.com/steinbergmedia/vst3_pluginterfaces/blob/2ad397ade5b51007860bedb3b01b8afd2c5f6fba/vst/ivstaudioprocessor.h#L145-L159
@@ -1721,7 +1721,7 @@ impl<P: Vst3Plugin> IMidiMappingTrait for Wrapper<P> {
         channel: i16,
         midiControllerNumber: CtrlNumber,
         param_id: *mut ParamID,
-    ) -> tresult {
+    ) -> tresult { unsafe {
         if P::MIDI_INPUT < MidiConfig::MidiCCs
             || busIndex != 0
             || !(0..VST3_MIDI_CHANNELS as i16).contains(&channel)
@@ -1738,7 +1738,7 @@ impl<P: Vst3Plugin> IMidiMappingTrait for Wrapper<P> {
             VST3_MIDI_PARAMS_START + midiControllerNumber as u32 + (channel as u32 * VST3_MIDI_CCS);
 
         kResultOk
-    }
+    }}
 }
 
 impl<P: Vst3Plugin> INoteExpressionControllerTrait for Wrapper<P> {
@@ -1757,7 +1757,7 @@ impl<P: Vst3Plugin> INoteExpressionControllerTrait for Wrapper<P> {
         _channel: i16,
         note_expression_idx: i32,
         info: *mut NoteExpressionTypeInfo,
-    ) -> tresult {
+    ) -> tresult { unsafe {
         if P::MIDI_INPUT < MidiConfig::Basic
             || bus_idx != 0
             || !(0..note_expressions::KNOWN_NOTE_EXPRESSIONS.len() as i32)
@@ -1790,7 +1790,7 @@ impl<P: Vst3Plugin> INoteExpressionControllerTrait for Wrapper<P> {
         info.flags = 1 << 2; // kIsAbsolute
 
         kResultOk
-    }
+    }}
 
     unsafe fn getNoteExpressionStringByValue(
         &self,
@@ -1832,7 +1832,7 @@ impl<P: Vst3Plugin> IUnitInfoTrait for Wrapper<P> {
         self.inner.param_units.len() as i32
     }
 
-    unsafe fn getUnitInfo(&self, unit_index: i32, info: *mut UnitInfo) -> tresult {
+    unsafe fn getUnitInfo(&self, unit_index: i32, info: *mut UnitInfo) -> tresult { unsafe {
         check_null_ptr!(info);
 
         match self.inner.param_units.info(unit_index as usize) {
@@ -1849,7 +1849,7 @@ impl<P: Vst3Plugin> IUnitInfoTrait for Wrapper<P> {
             }
             None => kInvalidArgument,
         }
-    }
+    }}
 
     unsafe fn getProgramListCount(&self) -> i32 {
         // TODO: Do we want program lists? Probably not, CLAP doesn't even support them.
