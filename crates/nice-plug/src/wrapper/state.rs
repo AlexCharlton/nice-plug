@@ -100,8 +100,8 @@ pub(crate) unsafe fn serialize_json<'a, P: Plugin>(
 
     #[cfg(feature = "zstd")]
     {
-        const DEFAULT_COMPRESSION_LEVEL: i32 = 3;
-        let compressed = rust_zstd::compress::compress(json.as_slice(), DEFAULT_COMPRESSION_LEVEL);
+        let compressed = zstd::encode_all(json.as_slice(), zstd::DEFAULT_COMPRESSION_LEVEL)
+            .context("Could not compress state")?;
 
         let state_bytes = json.len();
         let compressed_state_bytes = compressed.len();
@@ -206,7 +206,7 @@ pub(crate) unsafe fn deserialize_object<P: Plugin>(
 /// multiple places. The returned state object can be passed to [`deserialize_object()`].
 pub(crate) unsafe fn deserialize_json(state: &[u8]) -> Option<PluginState> {
     #[cfg(feature = "zstd")]
-    let result: Option<PluginState> = match rust_zstd::decode::decompress(state) {
+    let result: Option<PluginState> = match zstd::decode_all(state) {
         Ok(decompressed) => match serde_json::from_slice(decompressed.as_slice()) {
             Ok(s) => {
                 let state_bytes = decompressed.len();
